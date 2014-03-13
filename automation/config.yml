@@ -1,0 +1,106 @@
+# Install flexget, use this config file and you get automated downloading and sorting of your shows from dc.
+# Tested on linux, may need some modifications otherwise.
+
+templates:
+  # These series will be sorted in correct folder automatically.
+  tv-series:
+    series:
+      agroup:
+        - Pioneer One:
+            identified_by: ep
+        - Another Series:
+            # If episodes are identified by date, rather than season and episode number.
+            identified_by: date
+tasks:
+  dc:
+    rss:
+      url: http://10.109.1.9/cms/rss/feed.php
+      title: title
+      link: href
+      group_links: yes
+    template: tv-series
+    # Don't use notify_osd on windows
+    notify_osd: yes
+    # Notifications on android. Again, don't use if you don't have a rapidpush account.
+    rapidpush:
+      apikey: xxxxxxx
+    # Replace eiskaltdcpp with your own client. ApexDC supports automatic downloading like Eiskalt.
+    exec: 'sleep 5 && eiskaltdcpp-qt "{{url}}"'
+
+# Movies having rating > 7.5
+  movies:
+    rss:
+      url: http://10.109.1.9/cms/rss/feed.php
+      title: title
+      link: href
+      group_links: yes
+    imdb:
+      min_score: 7.5
+    exec: 'eiskaltdcpp-qt "{{url}}.mkv"'
+
+# Automated Sorting into correct folders.
+  sort-series:
+    find:
+      path: /home/sa1/DC/temp/
+      regexp: '.*\.(avi|mkv|mp4)$'
+      recursive: yes
+    seen: local
+    template: tv-series
+    series:
+      settings:
+        agroup:
+          parse_only: yes
+    require_field: series_name
+    accept_all: yes
+    proxy: "http://10.3.100.212:8080"
+    move:
+      to: /home/sa1/DC/TV/{{series_name}}/Season {{series_season}}/
+      along:
+        - srt
+
+# Rename episodes and remove irritating vain mods' nicks.
+  renametv:
+    find:
+      path: /home/sa1/DC/temp/
+      regexp: '.*\.(avi|mkv|mp4)$'
+      recursive: yes
+    seen: local
+    template: tv-series
+    series:
+      settings:
+        agroup:
+          parse_only: yes
+    thetvdb_lookup: yes
+    require_field: series_name
+    disable_builtins: [seen]
+    accept_all: yes
+    proxy: "http://10.3.100.212:8080"
+    move:
+      to: /home/sa1/DC/temp/
+      along:
+        - srt
+      filename: '{{ tvdb_series_name }} - {{ tvdb_ep_id }} - {{ tvdb_ep_name }}{{ location | pathext }}'
+
+
+# Auto-download available subtitles. Requires subliminal to be installed.
+  subtitles:
+    find:
+      path:
+        - /home/sa1/DC/temp/
+      regexp: '.*\.(avi|mkv|mp4)$'
+      recursive: yes
+    disable_builtins: [seen]
+    accept_all: yes
+    #subliminal:
+    #  languages:
+    #    - eng
+    exec: "export http_proxy='http://10.3.100.212:8080' && subliminal -l en -p addic7ed -s --addic7ed-username xxx --addic7ed-password xxxx -- '{{location}}'"
+
+# Schedules for when run in daemon mode.
+schedules:
+  - tasks: [dc, subtitles, renametv, movies]
+    interval:
+      minutes: 10
+  - tasks: [sort-series]
+    interval:
+      hours: 24
